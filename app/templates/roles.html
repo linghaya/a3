@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+{% block title %}角色权限 - 爱管理{% endblock %}
+{% block content %}
+<h1>角色与权限管理</h1>
+
+<div class="card">
+  <h2>新建角色</h2>
+  <form method="post" action="{{ url_for('roles.role_create') }}" class="grid">
+    <div>
+      <label>角色名称</label>
+      <input type="text" name="name" placeholder="如：测试工程师" required>
+    </div>
+    <div>
+      <label>角色描述</label>
+      <input type="text" name="description" placeholder="可选">
+    </div>
+    <div class="form-actions"><button type="submit">创建角色</button></div>
+  </form>
+</div>
+
+<div class="card">
+  <h2>角色列表</h2>
+  <table>
+    <tr><th>角色</th><th>描述</th><th>当前权限</th><th>成员数</th><th>操作</th></tr>
+    {% for role in roles %}
+    <tr>
+      <td>{{ role.name }}</td>
+      <td class="muted">{{ role.description }}</td>
+      <td>
+        {% if role.permissions %}
+          {% for p in role.permissions %}<span class="tag">{{ p.name }}</span> {% endfor %}
+        {% else %}<span class="muted">（无权限）</span>{% endif %}
+      </td>
+      <td>{{ role.users | length }}</td>
+      <td>
+        <form method="post" action="{{ url_for('roles.role_delete', role_id=role.id) }}"
+              style="display:inline" onsubmit="return confirm('确认删除角色「{{ role.name }}」？')">
+          <button type="submit" class="btn-sm" style="background:#c53030">删除</button>
+        </form>
+      </td>
+    </tr>
+    {% endfor %}
+  </table>
+</div>
+
+<div class="card">
+  <h2>分配权限</h2>
+  {% for role in roles %}
+  <form method="post" action="{{ url_for('roles.role_edit_permissions', role_id=role.id) }}"
+        style="margin-bottom:12px; border-bottom:1px solid #e2e8f0; padding-bottom:12px;">
+    <b>{{ role.name }}</b>
+    <span class="muted">—— 勾选该角色拥有的权限（不勾选即移除）</span>
+    {% for name, desc in permissions.items() %}
+      <label style="display:inline-block; margin-right:16px">
+        <input type="checkbox" name="permissions" value="{{ name }}"
+               {% if role.has_permission(name) %}checked{% endif %} style="width:auto">
+        {{ name }}（{{ desc }}）
+      </label>
+    {% endfor %}
+    <div class="form-actions"><button type="submit" class="btn-sm">保存「{{ role.name }}」的权限</button></div>
+  </form>
+  {% endfor %}
+</div>
+{% endblock %}

@@ -1,0 +1,127 @@
+{% extends "base.html" %}
+{% block title %}趋势与报表 - 爱管理{% endblock %}
+{% block content %}
+<style>
+  .analytics-head { display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 16px; }
+  .analytics-head h1 { margin: 0; }
+  .chart-card { padding: 18px 20px 8px; }
+  .chart-legend { display: flex; gap: 16px; font-size: 12px; color: #4a5568; margin-top: 4px; }
+  .two-col { display: grid; grid-template-columns: 1.35fr 1fr; gap: 16px; }
+  .dist-row { display: flex; justify-content: space-between; font-size: 14px; margin: 10px 0 4px; }
+  .risk td { font-size: 13px; }
+  .work-table td { vertical-align: middle; }
+  .work-name { font-weight: 600; }
+  .suggestion { font-size: 12px; color: #718096; }
+  .export-note { font-size: 12px; color: #718096; margin-top: 6px; }
+  .empty { color: #a0aec0; font-size: 13px; }
+</style>
+
+<div class="analytics-head">
+  <div>
+    <h1>项目趋势与报表</h1>
+    <p class="muted">数据口径：按任务创建/完成时间实时聚合，时区东八区；完成时间以最后一次状态变更为准。</p>
+  </div>
+  <div>
+    {% if can_export %}
+    <a class="btn" href="{{ url_for('analytics.export_csv') }}" style="display:inline-block;margin:0">导出任务报表（CSV）</a>
+    {% else %}
+    <span class="muted">当前角色无导出权限（需要 report.export）</span>
+    {% endif %}
+  </div>
+</div>
+
+<div class="kpis">
+  <div class="kpi"><div class="num">{{ kpis.completion_rate }}%</div><div class="label">整体完成率</div>
+    <div class="hint">{{ kpis.done }} / {{ kpis.total }} 项已完成</div></div>
+  <div class="kpi"><div class="num {{ 'overdue' if kpis.overdue }}">{{ kpis.overdue }}</div><div class="label">逾期未完成</div>
+    <div class="hint">高优先级未完成 {{ kpis.high_open }} 项</div></div>
+  <div class="kpi"><div class="num">{{ kpis.throughput_7d }}</div><div class="label">近 7 天完成</div>
+    <div class="hint">平均交付周期 {{ kpis.avg_cycle_days }} 天</div></div>
+  <div class="kpi"><div class="num">{{ kpis.open }}</div><div class="label">在办任务</div>
+    <div class="hint">未指派 {{ kpis.unassigned }} 项 · 总范围 {{ kpis.scope }}</div></div>
+</div>
+
+<div class="card chart-card">
+  <div class="section-title">
+    <h2 style="margin:0">累计燃起图（近 14 天）</h2>
+    <span class="pill">总范围 {{ kpis.scope }} · 已完成 {{ kpis.burned }}</span>
+  </div>
+  {{ burnup_svg | safe }}
+  <p class="muted" style="margin:8px 0 10px">
+    灰色虚线是累计创建的任务总量（范围），蓝色实线是累计完成量；两线之间的差距就是"还没交付的范围"。
+    范围线在上升说明还在加需求，蓝线变平说明交付停滞——这两件事必须分开看。
+  </p>
+</div>
+
+<div class="two-col">
+  <div class="card">
+    <h2>状态与优先级分布</h2>
+    {% set total = status_counts.all if status_counts.all else 1 %}
+    {% for key, label in [('pending','未开始'),('in_progress','进行中'),('done','完成')] %}
+    <div class="dist-row"><span>{{ label }}</span><span><b>{{ status_counts[key] }}</b> 项</span></div>
+    <div class="bar"><span style="width: {{ (status_counts[key] * 100 / total) | round(0, 'floor') }}%"></span></div>
+    {% endfor %}
+
+    <h2 style="margin-top:20px">未完成任务优先级</h2>
+    {% set open_total = (priority_counts[1] + priority_counts[2] + priority_counts[3]) if (priority_counts[1] + priority_counts[2] + priority_counts[3]) else 1 %}
+    {% for p, label, cls in [(1,'高','high'),(2,'中','mid'),(3,'低','')] %}
+    <div class="dist-row"><span>{{ label }}优先级</span><span><b>{{ priority_counts[p] }}</b> 项</span></div>
+    <div class="bar {{ cls }}"><span style="width: {{ (priority_counts[p] * 100 / open_total) | round(0, 'floor') }}%"></span></div>
+    {% endfor %}
+  </div>
+
+  <div class="card">
+    <div class="section-title">
+      <h2 style="margin:0">成员负载（加权）</h2>
+      {% if can_view_workload %}
+      <a class="btn btn-sm" href="{{ url_for('analytics.workload') }}" style="display:inline-block;margin:0">查看完整视图</a>
+      {% endif %}
+    </div>
+    <p class="muted">按优先级加权：高=3、中=2、低=1；只统计未完成任务。</p>
+    <table class="work-table">
+      <tr><th>成员</th><th>在办</th><th>逾期</th><th style="width:34%">负载</th><th>等级</th></tr>
+      {% for m in workload.members %}
+      <tr>
+        <td class="work-name">{{ m.user.username }}</td>
+        <td>{{ m.open }}</td>
+        <td class="{{ 'overdue' if m.overdue }}">{{ m.overdue }}</td>
+        <td>
+          <div class="bar {{ 'high' if m.level == '高' else ('mid' if m.level == '中' else '') }}">
+            <span style="width: {{ m.percent }}%"></span>
+          </div>
+          <span class="suggestion">{{ m.weight }} 点</span>
+        </td>
+        <td><span class="pill">{{ m.level }}</span></td>
+      </tr>
+      {% endfor %}
+    </table>
+    {% if workload.unassigned_count %}
+    <p class="muted" style="margin-top:10px">另有 {{ workload.unassigned_count }} 项未指派任务（{{ workload.unassigned_weight }} 点），建议在计划会上明确负责人。</p>
+    {% endif %}
+  </div>
+</div>
+
+<div class="card">
+  <div class="section-title">
+    <h2 style="margin:0">风险清单（按逾期与优先级排序）</h2>
+    <span class="pill">共 {{ kpis.open }} 项在办</span>
+  </div>
+  <table class="risk">
+    <tr><th>任务</th><th>负责人</th><th>优先级</th><th>截止时间</th><th>风险</th></tr>
+    {% for t in risks %}
+    <tr>
+      <td><a href="{{ url_for('tasks.task_detail', task_id=t.id) }}" style="color:#2d3748">{{ t.title }}</a></td>
+      <td>{{ t.assignee.username if t.assignee else '未指派' }}</td>
+      <td><span class="tag tag-p{{ t.priority }}">{{ t.priority_label }}</span></td>
+      <td class="nowrap">{{ t.due_date.strftime('%Y-%m-%d') if t.due_date else '—' }}</td>
+      <td>{% if t.is_overdue %}<span class="overdue">已逾期</span>{% elif t.priority == 1 %}<span class="pill">高优先级</span>{% else %}<span class="muted">关注</span>{% endif %}</td>
+    </tr>
+    {% else %}
+    <tr><td colspan="5" class="empty">当前没有在办任务。</td></tr>
+    {% endfor %}
+  </table>
+  <p class="muted" style="margin-top:10px">
+    报表导出为 CSV（UTF-8 BOM），字段含状态、优先级、负责人、截止时间、逾期标记、创建/完成时间、评论数与最后活动，可直接用 Excel 打开做周报。
+  </p>
+</div>
+{% endblock %}

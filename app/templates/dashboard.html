@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% block title %}首页 - 爱管理{% endblock %}
+{% block content %}
+<h1>你好，{{ user.username }}</h1>
+<div class="grid">
+  <div class="card">
+    <h2>我的信息</h2>
+    <p class="muted">角色：{{ user.role.name }}</p>
+    <p class="muted">邮箱：{{ user.email }}</p>
+    <p class="muted">登录时间：{{ session.get('login_time') | localtime }}</p>
+    <p class="muted">我的权限：{% if session.get('permissions') %}{{ session['permissions'] | join('、') }}{% else %}（无）{% endif %}</p>
+  </div>
+  <div class="card">
+    <h2>快捷入口</h2>
+    <p><a class="btn btn-sm" href="{{ url_for('tasks.task_list') }}" style="display:inline-block">进入任务管理</a></p>
+    <p><a class="btn btn-sm" href="{{ url_for('board.board_view') }}" style="display:inline-block">查看项目看板</a></p>
+    <p><a class="btn btn-sm" href="{{ url_for('analytics.dashboard') }}" style="display:inline-block">查看趋势与报表</a></p>
+    {% if 'report.export' in session.get('permissions', []) %}
+    <p><a class="btn btn-sm" href="{{ url_for('analytics.export_csv') }}" style="display:inline-block">导出任务报表</a></p>
+    {% endif %}
+  </div>
+</div>
+<div class="card">
+  <h2>爱管理 v3.0（凤凰）</h2>
+  <p class="muted">
+    在 Sprint 1（账户与权限基石）、Sprint 2（成员协作与可视化看板）之上，Sprint 3 补齐了
+    协作闭环与项目洞察：任务评论、任务状态变更记录（活动时间线）、成员负载视图、
+    项目趋势监控与 CSV 报表导出；看板的"实时刷新"从 5 秒轮询升级为 SSE 推送；
+    邀请码增加 7 天有效期，权限在每次请求实时生效。
+  </p>
+  <p class="muted">发布就绪：三个 Sprint 增量全量集成，全量回归与两条端到端旅程通过；已知限制与技术债在 README 与《发布说明》中如实登记。</p>
+</div>
+{% endblock %}

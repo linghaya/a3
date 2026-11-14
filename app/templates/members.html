@@ -1,0 +1,92 @@
+{% extends "base.html" %}
+{% block title %}成员管理 - 爱管理{% endblock %}
+{% block content %}
+<h1>成员管理</h1>
+
+<div class="card">
+  <h2>邀请成员</h2>
+  <p class="muted">生成一次性邀请码（默认 7 天有效），受邀成员注册时填写邀请码即可加入团队，并获得所选角色。</p>
+  <form method="post" action="{{ url_for('members.invite_create') }}" class="grid">
+    <div>
+      <label>加入后的角色</label>
+      <select name="role">
+        {% for r in roles %}
+        <option value="{{ r.name }}" {% if r.name == '团队成员' %}selected{% endif %}>{{ r.name }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="form-actions"><button type="submit">生成邀请码</button></div>
+  </form>
+</div>
+
+<div class="card">
+  <h2>邀请记录（共 {{ invites | length }} 条）</h2>
+  <table>
+    <tr><th>邀请码</th><th>预设角色</th><th>邀请人</th><th>创建时间</th><th>有效期</th><th>状态</th><th>操作</th></tr>
+    {% for inv in invites %}
+    <tr>
+      <td><code>{{ inv.code }}</code></td>
+      <td>{{ inv.role.name }}</td>
+      <td>{{ inv.invited_by.username if inv.invited_by else '—' }}</td>
+      <td>{{ inv.created_at | localtime }}</td>
+      <td class="muted">
+        {% if inv.expires_at %}
+          {{ inv.expires_at | localtime('%Y-%m-%d %H:%M') }}
+          {% if inv.status == 'pending' %}
+            {% if inv.is_expired %}（已过期）{% else %}（剩 {{ inv.days_left }} 天）{% endif %}
+          {% endif %}
+        {% else %}长期有效（历史邀请）{% endif %}
+      </td>
+      <td>
+        {{ inv.status_label }}{% if inv.accepted_by %}（{{ inv.accepted_by.username }}）{% endif %}
+      </td>
+      <td>
+        {% if inv.status == 'pending' %}
+        <form method="post" action="{{ url_for('members.invite_revoke', invite_id=inv.id) }}" style="display:inline">
+          <button type="submit" class="btn-sm" style="background:#c53030">撤销</button>
+        </form>
+        {% else %}<span class="muted">—</span>{% endif %}
+      </td>
+    </tr>
+    {% else %}
+    <tr><td colspan="7" class="muted">还没有邀请记录，先在上方生成一个邀请码。</td></tr>
+    {% endfor %}
+  </table>
+</div>
+
+<div class="card">
+  <h2>成员列表（共 {{ users | length }} 人）</h2>
+  <table>
+    <tr><th>用户名</th><th>邮箱</th><th>角色</th><th>名下任务</th><th>加入时间</th><th>操作</th></tr>
+    {% for u in users %}
+    <tr>
+      <td>{{ u.username }}{% if u.id == session.get('user_id') %} <span class="muted">（我）</span>{% endif %}</td>
+      <td class="muted">{{ u.email }}</td>
+      <td>
+        <form method="post" action="{{ url_for('members.member_change_role', user_id=u.id) }}"
+              style="display:flex; gap:6px; align-items:center">
+          <select name="role" style="width:auto">
+            {% for r in roles %}
+            <option value="{{ r.name }}" {% if r.name == u.role.name %}selected{% endif %}>{{ r.name }}</option>
+            {% endfor %}
+            {% if u.role.name == '管理员' %}<option value="管理员" selected>管理员</option>{% endif %}
+          </select>
+          <button type="submit" class="btn-sm">保存</button>
+        </form>
+      </td>
+      <td>
+        {% set unfinished = u.tasks | rejectattr('status', 'equalto', 'done') | list | length %}
+        {{ u.tasks | length }} 项{% if unfinished %}（{{ unfinished }} 项未完成）{% endif %}
+      </td>
+      <td class="muted">{{ u.created_at | localtime('%Y-%m-%d') }}</td>
+      <td>
+        <form method="post" action="{{ url_for('members.member_delete', user_id=u.id) }}"
+              style="display:inline" onsubmit="return confirm('确认移除成员「{{ u.username }}」？')">
+          <button type="submit" class="btn-sm" style="background:#c53030">移除</button>
+        </form>
+      </td>
+    </tr>
+    {% endfor %}
+  </table>
+</div>
+{% endblock %}

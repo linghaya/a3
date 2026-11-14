@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+{% block title %}成员负载 - 爱管理{% endblock %}
+{% block content %}
+<style>
+  .head { display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 16px; }
+  .head h1 { margin: 0; }
+  .workload-table td { vertical-align: middle; }
+  .name { font-weight: 600; }
+  .level-high { color: #c53030; font-weight: 600; }
+  .level-mid { color: #c05621; font-weight: 600; }
+  .level-low { color: #2f855a; font-weight: 600; }
+  .suggestion { font-size: 13px; color: #4a5568; }
+  .summary { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 16px; }
+  .summary .kpi .num { font-size: 22px; }
+</style>
+
+<div class="head">
+  <div>
+    <h1>成员负载视图</h1>
+    <p class="muted">只统计未完成任务；负载点数 = 高优先级×3 + 中×2 + 低×1。用于计划会分配任务与识别过载。</p>
+  </div>
+  <a class="btn btn-sm" href="{{ url_for('analytics.dashboard') }}" style="display:inline-block;margin:0">返回趋势报表</a>
+</div>
+
+<div class="summary">
+  <div class="kpi"><div class="num">{{ members | length }}</div><div class="label">团队成员</div></div>
+  <div class="kpi"><div class="num">{{ unassigned_count }}</div><div class="label">未指派任务</div>
+    <div class="hint">合计 {{ unassigned_weight }} 点</div></div>
+  <div class="kpi"><div class="num">{{ max_weight }}</div><div class="label">单人最高负载</div>
+    <div class="hint">负载点数，不是任务条数</div></div>
+</div>
+
+<div class="card">
+  <table class="workload-table">
+    <tr><th>成员</th><th>角色</th><th>在办</th><th>已完成</th><th>逾期</th><th>负载点数</th><th style="width:24%">负载条</th><th>建议</th></tr>
+    {% for m in members %}
+    <tr>
+      <td class="name">{{ m.user.username }}</td>
+      <td>{{ m.user.role.name }}</td>
+      <td>{{ m.open }}</td>
+      <td>{{ m.done }}</td>
+      <td class="{{ 'overdue' if m.overdue }}">{{ m.overdue }}</td>
+      <td><b>{{ m.weight }}</b></td>
+      <td>
+        <div class="bar {{ 'high' if m.level == '高' else ('mid' if m.level == '中' else '') }}">
+          <span style="width: {{ m.percent }}%"></span>
+        </div>
+        <span class="pill">{{ m.level }}</span>
+      </td>
+      <td class="suggestion">{{ m.suggestion }}</td>
+    </tr>
+    {% endfor %}
+  </table>
+</div>
+
+<div class="card">
+  <h2>怎么读这张表</h2>
+  <ul class="muted" style="padding-left:20px;line-height:1.9">
+    <li><b>看点数，不看条数</b>：3 条低优先级任务的点数（3）不等于 1 条高优先级任务（3），但前者更容易被误认为"很忙"。</li>
+    <li><b>逾期优先于负载</b>：逾期意味着承诺已经失守，先处理逾期，再谈均衡。</li>
+    <li><b>未指派是隐性风险</b>：未指派任务不计入任何人的负载，最容易在演示前夜暴露。</li>
+    <li><b>这张表不自动改任务</b>：负载视图只提供决策依据，转派仍由管理员在任务模块操作，避免系统替人做决定。</li>
+  </ul>
+</div>
+{% endblock %}

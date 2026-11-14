@@ -1,0 +1,11 @@
+{% extends "base.html" %}
+{% block title %}{{ code }} - 爱管理{% endblock %}
+{% block content %}
+<div class="card" style="max-width:480px;margin:60px auto;text-align:center;">
+  <h1 style="font-size:40px;color:#2b6cb0">{{ code }}</h1>
+  <p style="margin-top:8px">{{ message }}</p>
+  <div class="form-actions">
+    <a class="btn" href="{{ url_for('auth.dashboard') }}" style="display:inline-block">返回首页</a>
+  </div>
+</div>
+{% endblock %}

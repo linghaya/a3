@@ -1,0 +1,121 @@
+{% extends "base.html" %}
+{% block title %}项目看板 - 爱管理{% endblock %}
+{% block content %}
+<style>
+  .board { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+  .board-col { background: #fff; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,.1); padding: 16px; }
+  .board-col h2 { display: flex; justify-content: space-between; align-items: center; }
+  .board-col .count { font-size: 13px; background: #edf2f7; border-radius: 10px; padding: 2px 10px; color: #4a5568; }
+  .board-card { border: 1px solid #e2e8f0; border-left: 4px solid #a0aec0; border-radius: 6px;
+    padding: 10px 12px; margin-bottom: 10px; background: #fafcff; }
+  .board-card.p1 { border-left-color: #e53e3e; }
+  .board-card.p2 { border-left-color: #dd6b20; }
+  .board-card.p3 { border-left-color: #718096; }
+  .board-card .title { font-size: 14px; font-weight: 600; }
+  .board-card .meta { margin-top: 6px; font-size: 12px; color: #718096; display: flex; gap: 8px; flex-wrap: wrap; }
+  .overdue { color: #c53030; font-weight: 600; }
+  .s-pending { background: #e2e8f0; color: #2d3748; }
+  .s-progress { background: #bee3f8; color: #1a365d; }
+  .s-done { background: #c6f6d5; color: #22543d; }
+  .board-toolbar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+  #fresh-tip { display: none; background: #fefcbf; color: #744210; padding: 8px 12px;
+    border-radius: 4px; font-size: 13px; margin-bottom: 10px; }
+</style>
+
+<div class="board-toolbar">
+  <h1 style="margin:0">项目看板</h1>
+  <span class="muted">
+    共 {{ total }} 项任务 · 页面生成于 {{ generated_at }}
+    <a href="{{ url_for('board.board_view') }}" class="btn btn-sm" style="display:inline-block;margin-left:8px">刷新</a>
+  </span>
+</div>
+
+<div id="fresh-tip">看板数据有变化，<a href="{{ url_for('board.board_view') }}">点击刷新</a>。</div>
+
+<div class="board">
+  {% for col in columns %}
+  <div class="board-col" data-key="{{ col.key }}" data-ids="{{ col.ids }}">
+    <h2>{{ col.label }} <span class="count" id="count-{{ col.key }}">{{ col.count }}</span></h2>
+    {% for t in col.tasks %}
+    <div class="board-card p{{ t.priority }}">
+      <div class="title">
+        <a href="{{ url_for(detail_endpoint, task_id=t.id) }}" style="color:#2d3748;text-decoration:none">{{ t.title }}</a>
+      </div>
+      <div class="meta">
+        <span class="tag tag-p{{ t.priority }}">{{ t.priority_label }}</span>
+        <span>{{ t.assignee.username if t.assignee else '未指派' }}</span>
+        {% if t.due_date %}
+        <span class="{{ 'overdue' if t.is_overdue else '' }}">
+          截止 {{ t.due_date.strftime('%m-%d') }}{% if t.is_overdue %}（已逾期）{% endif %}
+        </span>
+        {% endif %}
+      </div>
+    </div>
+    {% else %}
+    <p class="muted" style="padding:8px 0">暂无任务</p>
+    {% endfor %}
+  </div>
+  {% endfor %}
+</div>
+
+<p class="muted" style="margin-top:12px">
+  看板通过 SSE 长连接实时推送状态（<span id="live-status">正在连接…</span>）；任务分布变化后会自动刷新卡片。
+  若浏览器不支持 SSE，自动降级为 10 秒轮询。
+</p>
+
+<script>
+  // Sprint 3：SSE 实时推送 + 轮询降级（偿还 TD-01）。
+  // 只更新计数是不够的（Sprint 2 的教训：用户看到"数字变了、卡片没动"会以为坏了），
+  // 因此 id 列表变化时自动重载整页，让卡片位置与计数保持一致。
+  (function () {
+    var rendered = {};
+    var pendingReload = false;
+    document.querySelectorAll('.board-col').forEach(function (el) {
+      rendered[el.dataset.key] = el.dataset.ids || '';
+    });
+
+    var tip = document.getElementById('fresh-tip');
+    var statusEl = document.getElementById('live-status');
+
+    function apply(data) {
+      if (!data || !data.ok) { return; }
+      var changed = false;
+      data.columns.forEach(function (col) {
+        var el = document.getElementById('count-' + col.key);
+        if (el) { el.textContent = col.count; }
+        var ids = (col.task_ids || []).join(',');
+        if ((rendered[col.key] || '') !== ids) { changed = true; }
+      });
+      if (changed && !pendingReload) {
+        pendingReload = true;
+        if (tip) {
+          tip.style.display = 'block';
+          tip.innerHTML = '看板数据已变化，正在自动刷新…';
+        }
+        // 800ms 的延迟让用户看见"有变化"的提示，再重载，避免闪一下就没了
+        setTimeout(function () { window.location.reload(); }, 800);
+      }
+    }
+
+    if (window.EventSource) {
+      var source = new EventSource("{{ url_for('board.board_stream') }}");
+      source.addEventListener('stats', function (event) {
+        if (statusEl) { statusEl.textContent = 'SSE 已连接'; }
+        try { apply(JSON.parse(event.data)); } catch (e) { /* 忽略坏包 */ }
+      });
+      source.onerror = function () {
+        // 浏览器会自动重连；这里只更新提示，不主动关闭
+        if (statusEl) { statusEl.textContent = 'SSE 重连中…'; }
+      };
+    } else {
+      if (statusEl) { statusEl.textContent = '轮询模式（10 秒）'; }
+      setInterval(function () {
+        fetch("{{ url_for('board.board_stats') }}", { headers: { 'Accept': 'application/json' } })
+          .then(function (r) { return r.ok ? r.json() : null; })
+          .then(apply)
+          .catch(function () { /* 轮询失败静默处理，不打断演示 */ });
+      }, 10000);
+    }
+  })();
+</script>
+{% endblock %}
